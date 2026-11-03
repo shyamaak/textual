@@ -55,6 +55,159 @@ async def test_on_button_pressed() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("button_id", "expected"),
+    [
+        pytest.param("normal", ["button"], id="normal-button"),
+        pytest.param("custom", ["my_button", "button"], id="my-button"),
+    ],
+)
+async def test_on_widget_subclass_message(button_id: str, expected: list[str]) -> None:
+    calls: list[str] = []
+
+    class MyButton(Button):
+        pass
+
+    class ButtonApp(App[None]):
+        def compose(self) -> ComposeResult:
+            yield Button("Normal", id="normal")
+            yield MyButton("Custom", id="custom")
+
+        @on(Button.Pressed)
+        def button_pressed(self) -> None:
+            calls.append("button")
+
+        @on(MyButton.Pressed)
+        def my_button_pressed(self) -> None:
+            calls.append("my_button")
+
+    async with ButtonApp().run_test() as pilot:
+        await pilot.click(f"#{button_id}")
+        await pilot.pause()
+
+    assert calls == expected
+
+
+async def test_on_deep_button_subclass_message() -> None:
+    calls: list[str] = []
+
+    class MyButton(Button):
+        pass
+
+    class DeepButton(MyButton):
+        pass
+
+    class ButtonApp(App[None]):
+        def compose(self) -> ComposeResult:
+            yield DeepButton("Deep", id="deep")
+
+        @on(Button.Pressed)
+        def button_pressed(self) -> None:
+            calls.append("button")
+
+        @on(MyButton.Pressed)
+        def my_button_pressed(self) -> None:
+            calls.append("my_button")
+
+        @on(DeepButton.Pressed)
+        def deep_button_pressed(self) -> None:
+            calls.append("deep_button")
+
+    async with ButtonApp().run_test() as pilot:
+        await pilot.click("#deep")
+        await pilot.pause()
+
+    assert calls == ["deep_button", "my_button", "button"]
+
+
+async def test_on_sibling_button_subclasses_are_separate() -> None:
+    calls: list[str] = []
+
+    class FirstButton(Button):
+        pass
+
+    class SecondButton(Button):
+        pass
+
+    class ButtonApp(App[None]):
+        def compose(self) -> ComposeResult:
+            yield FirstButton("First", id="first")
+            yield SecondButton("Second", id="second")
+
+        @on(FirstButton.Pressed)
+        def first_button_pressed(self) -> None:
+            calls.append("first")
+
+        @on(SecondButton.Pressed)
+        def second_button_pressed(self) -> None:
+            calls.append("second")
+
+    async with ButtonApp().run_test() as pilot:
+        await pilot.click("#first")
+        await pilot.pause()
+        assert calls == ["first"]
+
+        await pilot.click("#second")
+        await pilot.pause()
+
+    assert calls == ["first", "second"]
+
+
+async def test_on_button_pressed_name_handler_for_subclass() -> None:
+    calls: list[str] = []
+
+    class MyButton(Button):
+        pass
+
+    class ButtonApp(App[None]):
+        def compose(self) -> ComposeResult:
+            yield MyButton("Custom", id="custom")
+
+        def on_button_pressed(self, event: Button.Pressed) -> None:
+            calls.append("button")
+
+    async with ButtonApp().run_test() as pilot:
+        await pilot.click("#custom")
+        await pilot.pause()
+
+    assert calls == ["button"]
+
+
+async def test_on_explicit_button_pressed_message() -> None:
+    calls: list[str] = []
+
+    class MyButton(Button):
+        class Pressed(Button.Pressed):
+            pass
+
+    explicit_pressed = MyButton.Pressed
+
+    class ButtonApp(App[None]):
+        def compose(self) -> ComposeResult:
+            yield MyButton("Custom", id="custom")
+
+        @on(Button.Pressed)
+        def button_pressed(self) -> None:
+            calls.append("button")
+
+        @on(MyButton.Pressed)
+        def my_button_pressed(self) -> None:
+            calls.append("my_button")
+
+        def on_my_button_pressed(self, event: MyButton.Pressed) -> None:
+            calls.append("my_button_name")
+
+        def on_button_pressed(self, event: Button.Pressed) -> None:
+            calls.append("button_name")
+
+    async with ButtonApp().run_test() as pilot:
+        await pilot.click("#custom")
+        await pilot.pause()
+
+    assert MyButton.Pressed is explicit_pressed
+    assert calls == ["my_button", "button", "my_button_name"]
+
+
 async def test_on_inheritance() -> None:
     """Test on decorator and inheritance."""
     pressed: list[str] = []

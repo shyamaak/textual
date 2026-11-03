@@ -328,6 +328,27 @@ class Button(Widget, can_focus=True):
             """
             return self.button
 
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        if "Pressed" in cls.__dict__:
+            return
+
+        parent_pressed = cls.Pressed
+        pressed = type(
+            "Pressed",
+            (parent_pressed,),
+            {
+                "__module__": cls.__module__,
+                "__qualname__": f"{cls.__qualname__}.Pressed",
+            },
+        )
+        pressed.handler_name = parent_pressed.handler_name
+        pressed.bubble = parent_pressed.bubble
+        pressed.verbose = parent_pressed.verbose
+        pressed.no_dispatch = parent_pressed.no_dispatch
+        pressed.namespace = parent_pressed.namespace
+        cls.Pressed = pressed
+
     def __init__(
         self,
         label: ContentText | None = None,
@@ -432,7 +453,7 @@ class Button(Widget, can_focus=True):
         self._start_active_affect()
         # ...and let other components know that we've just been clicked:
         if self.action is None:
-            self.post_message(Button.Pressed(self))
+            self.post_message(self.Pressed(self))
         else:
             self.call_later(
                 self.app.run_action, self.action, default_namespace=self._parent
